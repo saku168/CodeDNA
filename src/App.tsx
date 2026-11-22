@@ -30,6 +30,10 @@ import {
   X,
   BarChart3,
   TrendingUp,
+  HeartPulse,
+  ShieldCheck,
+  AlertTriangle,
+  Lightbulb,
 } from "lucide-react";
 
 import {
@@ -39,7 +43,7 @@ import {
   type FileInfo,
 } from "./analyzer";
 
-type Page = "Overview" | "File Explorer" | "Dependencies";
+type Page = "Overview" | "File Explorer" | "Dependencies" | "Code Health";
 
 function getFileColor(path: string): string {
   const extension = path.split(".").pop()?.toLowerCase();
@@ -207,10 +211,74 @@ export default function App() {
       .slice(0, 5);
   }, [result]);
 
+  const health = useMemo(() => {
+    if (!result || result.files.length === 0) {
+      return {
+        score: 0,
+        largeFiles: [] as FileInfo[],
+        isolatedFiles: [] as FileInfo[],
+        recommendations: [] as string[],
+      };
+    }
+
+    const largeFiles = result.files.filter((file) => file.lines > 300);
+
+    const connectedPaths = new Set(
+      result.connections.flatMap((connection) => [
+        connection.from,
+        connection.to,
+      ])
+    );
+
+    const isolatedFiles = result.files.filter(
+      (file) => !connectedPaths.has(file.path)
+    );
+
+    const largeRatio = largeFiles.length / result.files.length;
+    const isolatedRatio = isolatedFiles.length / result.files.length;
+
+    const score = Math.max(
+      0,
+      Math.min(
+        100,
+        Math.round(100 - largeRatio * 35 - isolatedRatio * 20)
+      )
+    );
+
+    const recommendations: string[] = [];
+
+    if (largeFiles.length > 0) {
+      recommendations.push(
+        `Review ${largeFiles.length} large file(s). Splitting responsibilities may improve readability.`
+      );
+    }
+
+    if (isolatedFiles.length > 0) {
+      recommendations.push(
+        `${isolatedFiles.length} file(s) have no detected local connections. Check whether they are entry points, utilities or unused files.`
+      );
+    }
+
+    if (result.connections.length === 0) {
+      recommendations.push(
+        "No local dependencies were detected. Check that your project uses relative imports."
+      );
+    }
+
+    if (largeFiles.length === 0 && isolatedFiles.length === 0) {
+      recommendations.push(
+        "No basic structural warnings were detected. Keep your files organized and your imports clear."
+      );
+    }
+
+    return { score, largeFiles, isolatedFiles, recommendations };
+  }, [result]);
+
   const navigation = [
     { name: "Overview" as Page, icon: LayoutDashboard },
     { name: "File Explorer" as Page, icon: Files },
     { name: "Dependencies" as Page, icon: GitBranch },
+    { name: "Code Health" as Page, icon: HeartPulse },
   ];
 
   return (
@@ -364,27 +432,19 @@ export default function App() {
                         <div><BarChart3 size={19} /><strong>File types</strong></div>
                         <span>{fileTypeStats.length} types</span>
                       </div>
-
-                      {fileTypeStats.length > 0 ? fileTypeStats.map(([type, count]) => {
+                      {fileTypeStats.map(([type, count]) => {
                         const percentage = Math.round((count / result.files.length) * 100);
                         return (
                           <div className="type-stat" key={type}>
                             <div className="type-stat-label">
-                              <span>{type}</span>
-                              <span>{count} files · {percentage}%</span>
+                              <span>{type}</span><span>{count} files · {percentage}%</span>
                             </div>
                             <div className="stat-track">
-                              <div
-                                className="stat-fill"
-                                style={{
-                                  width: `${percentage}%`,
-                                  background: getFileColor(`file.${type.toLowerCase()}`),
-                                }}
-                              />
+                              <div className="stat-fill" style={{ width: `${percentage}%`, background: getFileColor(`file.${type.toLowerCase()}`) }} />
                             </div>
                           </div>
                         );
-                      }) : <p>No file types found.</p>}
+                      })}
                     </div>
 
                     <div className="analytics-card">
@@ -392,7 +452,6 @@ export default function App() {
                         <div><TrendingUp size={19} /><strong>Most imported files</strong></div>
                         <span>TOP 5</span>
                       </div>
-
                       {mostImportedFiles.length > 0 ? mostImportedFiles.map(([path, count], index) => (
                         <div className="popular-file" key={path}>
                           <span className="popular-rank">{index + 1}</span>
@@ -402,12 +461,7 @@ export default function App() {
                           </div>
                           <span className="import-count">{count} imports</span>
                         </div>
-                      )) : (
-                        <div className="analytics-empty">
-                          <GitBranch size={22} />
-                          <p>No imported files detected yet.</p>
-                        </div>
-                      )}
+                      )) : <div className="analytics-empty"><GitBranch size={22} /><p>No imported files detected yet.</p></div>}
                     </div>
                   </div>
 
@@ -417,12 +471,13 @@ export default function App() {
 
                   <div className="quick-grid">
                     <button className="quick-card" onClick={() => setActive("File Explorer")}>
-                      <Files size={22} /><strong>Explore files</strong>
-                      <span>Browse all analyzed source files</span><ArrowRight size={17} />
+                      <Files size={22} /><strong>Explore files</strong><span>Browse all analyzed source files</span><ArrowRight size={17} />
                     </button>
                     <button className="quick-card" onClick={() => setActive("Dependencies")}>
-                      <GitBranch size={22} /><strong>View dependencies</strong>
-                      <span>Visualize how files connect</span><ArrowRight size={17} />
+                      <GitBranch size={22} /><strong>View dependencies</strong><span>Visualize how files connect</span><ArrowRight size={17} />
+                    </button>
+                    <button className="quick-card" onClick={() => setActive("Code Health")}>
+                      <HeartPulse size={22} /><strong>Code Health</strong><span>Review your project structure</span><ArrowRight size={17} />
                     </button>
                   </div>
                 </>
@@ -435,6 +490,124 @@ export default function App() {
                 </div>
               )}
             </>
+          )}
+
+          {active === "Code Health" && (
+            <section className="page-section">
+              <div className="page-heading">
+                <div className="eyebrow"><HeartPulse size={14} /> PROJECT QUALITY</div>
+                <h1>Code Health</h1>
+                <p>Understand the structure of your project and find areas to review.</p>
+              </div>
+
+              {result ? (
+                <>
+                  <div className="health-score-card">
+                    <div className="health-score-icon"><ShieldCheck size={30} /></div>
+                    <div>
+                      <span className="health-caption">STRUCTURAL HEALTH SCORE</span>
+                      <div className="health-number">{health.score}<span>/100</span></div>
+                      <p>This is an indicative score based on file size and detected local connections, not a full code quality test.</p>
+                    </div>
+                    <div className="health-score-ring">
+                      <span>{health.score}%</span>
+                    </div>
+                  </div>
+
+                  <div className="stats-grid health-stats">
+                    <div className="metric-card">
+                      <div className="metric-top"><span>Large files</span><AlertTriangle size={19} /></div>
+                      <strong>{health.largeFiles.length}</strong>
+                      <small>Over 300 lines</small>
+                    </div>
+                    <div className="metric-card">
+                      <div className="metric-top"><span>Isolated files</span><Network size={19} /></div>
+                      <strong>{health.isolatedFiles.length}</strong>
+                      <small>No detected connections</small>
+                    </div>
+                    <div className="metric-card">
+                      <div className="metric-top"><span>Dependencies</span><GitBranch size={19} /></div>
+                      <strong>{result.connections.length}</strong>
+                      <small>Local connections</small>
+                    </div>
+                    <div className="metric-card">
+                      <div className="metric-top"><span>Project files</span><Files size={19} /></div>
+                      <strong>{result.files.length}</strong>
+                      <small>Analyzed files</small>
+                    </div>
+                  </div>
+
+                  <div className="section-title">
+                    <div><h2>Recommendations</h2><p>Suggestions based on the detected project structure.</p></div>
+                  </div>
+
+                  <div className="health-recommendations">
+                    {health.recommendations.map((recommendation, index) => (
+                      <div className="health-recommendation" key={index}>
+                        <div className="recommendation-icon"><Lightbulb size={20} /></div>
+                        <p>{recommendation}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="section-title">
+                    <div><h2>Files to review</h2><p>Files that may deserve a closer look.</p></div>
+                  </div>
+
+                  <div className="analytics-grid">
+                    <div className="analytics-card">
+                      <div className="analytics-heading">
+                        <div><AlertTriangle size={19} /><strong>Large files</strong></div>
+                        <span>{health.largeFiles.length} FOUND</span>
+                      </div>
+                      {health.largeFiles.length > 0 ? health.largeFiles.map((file) => (
+                        <div className="popular-file" key={file.path}>
+                          <span className="popular-rank"><FileCode2 size={16} /></span>
+                          <div className="popular-file-info">
+                            <strong>{file.name}</strong>
+                            <small>{file.path}</small>
+                          </div>
+                          <span className="import-count">{file.lines} lines</span>
+                        </div>
+                      )) : (
+                        <div className="analytics-empty"><CheckCircle2 size={22} /><p>No files over 300 lines.</p></div>
+                      )}
+                    </div>
+
+                    <div className="analytics-card">
+                      <div className="analytics-heading">
+                        <div><Network size={19} /><strong>Isolated files</strong></div>
+                        <span>{health.isolatedFiles.length} FOUND</span>
+                      </div>
+                      {health.isolatedFiles.length > 0 ? health.isolatedFiles.slice(0, 10).map((file) => (
+                        <div className="popular-file" key={file.path}>
+                          <span className="popular-rank"><FileCode2 size={16} /></span>
+                          <div className="popular-file-info">
+                            <strong>{file.name}</strong>
+                            <small>{file.path}</small>
+                          </div>
+                          <span className="import-count">{file.lines} lines</span>
+                        </div>
+                      )) : (
+                        <div className="analytics-empty"><CheckCircle2 size={22} /><p>No isolated files detected.</p></div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="notice">
+                    <AlertCircle size={18} />
+                    A file without detected connections is not necessarily unused. It may be an application entry point, a standalone utility or a file loaded in another way.
+                  </div>
+                </>
+              ) : (
+                <div className="empty-state large-empty">
+                  <HeartPulse size={34} />
+                  <h3>No project analyzed yet</h3>
+                  <p>Analyze a project first to see its structural health.</p>
+                  <button className="primary-button" onClick={() => setActive("Overview")}>Go to Overview <ArrowRight size={16} /></button>
+                </div>
+              )}
+            </section>
           )}
 
           {active === "File Explorer" && (
@@ -458,18 +631,13 @@ export default function App() {
                   <div className="file-table">
                     <div className="file-table-head"><span>FILE PATH</span><span>LINES</span><span>IMPORTS</span></div>
                     {filteredFiles.map((file) => (
-                      <button
-                        className="file-table-row"
-                        key={file.path}
-                        onClick={() => setSelectedFile(file)}
-                        style={{
-                          width: "100%",
-                          textAlign: "left",
-                          cursor: "pointer",
-                          color: "inherit",
-                          background: selectedFile?.path === file.path ? "rgba(128,103,237,0.15)" : "transparent",
-                        }}
-                      >
+                      <button className="file-table-row" key={file.path} onClick={() => setSelectedFile(file)} style={{
+                        width: "100%",
+                        textAlign: "left",
+                        cursor: "pointer",
+                        color: "inherit",
+                        background: selectedFile?.path === file.path ? "rgba(128,103,237,0.15)" : "transparent",
+                      }}>
                         <div className="file-path"><FileCode2 size={17} color={getFileColor(file.path)} /><span>{file.path}</span></div>
                         <span>{file.lines}</span><span>{file.imports.length}</span>
                       </button>
