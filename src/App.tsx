@@ -6,7 +6,6 @@ import ReactFlow, {
   type Edge,
   type NodeMouseHandler,
 } from "reactflow";
-// @ts-expect-error - Stylesheet package export may lack a TypeScript declaration in some React Flow versions.
 import "reactflow/dist/style.css";
 
 import { useMemo, useState } from "react";
