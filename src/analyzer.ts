@@ -3,6 +3,7 @@ export interface FileInfo {
   name: string;
   lines: number;
   imports: string[];
+  source: string;
 }
 
 export interface FileConnection {
@@ -99,11 +100,13 @@ export async function analyzeFiles(inputFiles: File[]): Promise<AnalysisResult> 
       name: path.split("/").pop() || file.name,
       lines: source.length === 0 ? 0 : source.split(/\r\n|\r|\n/).length,
       specifiers: extractImportSpecifiers(source),
+      source,
     };
   }));
 
   const knownPaths = new Set(records.map((record) => record.path));
-  const files: FileInfo[] = records.map(({ path, name, lines, specifiers }) => ({
+  const files: FileInfo[] = records.map(({ path, name, lines, specifiers, source }) => ({
+    source,
     path,
     name,
     lines,
