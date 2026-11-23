@@ -4,14 +4,15 @@ import type { AnalysisResult } from "./analyzer";
 import "./tools.css";
 type Props = { result: AnalysisResult | null };
 type ToolKey = "complexity" | "duplicates" | "docs" | "report";
+type Metrics = { complexity: {path:string;score:number;lines:number}[]; duplicates: {text:string;files:string[]}[]; docs: {exported:number;documented:number} };
 function score(source: string): number {
  const branches=(source.match(/\b(if|else\s+if|for|while|case|catch|switch)\b|&&|\|\|/g)??[]).length;
  return Math.min(100,branches*4+Math.max(0,(source.split(/\r?\n/).length-80)/8));
 }
 export function ToolsPanel({result}:Props){
  const [active,setActive]=useState<ToolKey>("complexity");
- const metrics=useMemo(()=>{
-  if(!result)return {complexity:[] as {path:string;score:number;lines:number}[],duplicates:[] as {text:string;files:string[]}[],docs:{exported:number;documented:number}};
+ const metrics=useMemo<Metrics>(()=>{
+  if(!result)return {complexity:[],duplicates:[],docs:{exported:0,documented:0}};
   const complexity=result.files.map(f=>({path:f.path,score:score(f.source),lines:f.lines})).sort((a,b)=>b.score-a.score);
   const blocks=new Map<string,Set<string>>();
   for(const file of result.files){const lines=file.source.split(/\r?\n/).map(x=>x.trim()).filter(x=>x.length>=24&&!x.startsWith("//")&&!x.startsWith("*")&&!x.startsWith("import "));const seen=new Set<string>();for(let i=0;i<=lines.length-5;i++){const block=lines.slice(i,i+5).join("\n");if(seen.has(block))continue;seen.add(block);const set=blocks.get(block)??new Set<string>();set.add(file.path);blocks.set(block,set);}}
