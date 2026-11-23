@@ -8,7 +8,10 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Wrench, LogIn, LogOut } from "lucide-react";
+import { ToolsPanel } from "./ToolsPanel";
+import { supabase } from "./supabase";
 import {
   Activity,
   ArrowRight,
@@ -42,7 +45,7 @@ import {
   type FileInfo,
 } from "./analyzer";
 
-type Page = "Overview" | "File Explorer" | "Dependencies" | "Code Health";
+type Page = "Overview" | "File Explorer" | "Dependencies" | "Code Health" | "Tools" | "Admin";
 
 function getFileColor(path: string): string {
   const extension = path.split(".").pop()?.toLowerCase();
@@ -68,6 +71,25 @@ export default function App() {
   const [githubUrl, setGithubUrl] = useState("");
   const [search, setSearch] = useState("");
   const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null);
+  const [authUser, setAuthUser] = useState<any>(null);
+  const isAdmin = authUser?.app_metadata?.role === "admin";
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => setAuthUser(data.session?.user ?? null));
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => setAuthUser(session?.user ?? null));
+    return () => data.subscription.unsubscribe();
+  }, []);
+  async function signInWithGitHub() {
+    if (!supabase) { setError("Authentication is not configured yet. Add Supabase environment variables in Vercel."); return; }
+    const { error: authError } = await supabase.auth.signInWithOAuth({ provider: "github", options: { redirectTo: window.location.origin } });
+    if (authError) setError(authError.message);
+  }
+  async function signOut() {
+    if (!supabase) return;
+    const { error: authError } = await supabase.auth.signOut();
+    if (authError) setError(authError.message);
+    else setActive("Overview");
+  }
 
   async function runAnalysis(files: File[]) {
     setLoading(true);
@@ -278,6 +300,8 @@ export default function App() {
     { name: "File Explorer" as Page, icon: Files },
     { name: "Dependencies" as Page, icon: GitBranch },
     { name: "Code Health" as Page, icon: HeartPulse },
+    { name: "Tools" as Page, icon: Wrench },
+    ...(isAdmin ? [{ name: "Admin" as Page, icon: ShieldCheck }] : []),
   ];
 
   return (
@@ -329,7 +353,7 @@ export default function App() {
           <div className="topbar-breadcrumb">
             Workspace <span>/</span> <strong>{active}</strong>
           </div>
-          <div className="engine-status"><span className="online-dot" /> ENGINE ONLINE</div>
+          <div className="topbar-actions">{authUser ? <><span className="account-label">{authUser.user_metadata?.user_name || authUser.email || "Signed in"}{isAdmin && <b className="admin-pill">ADMIN</b>}</span><button className="auth-button" onClick={signOut}><LogOut size={15} /> Sign out</button></> : <button className="auth-button" onClick={signInWithGitHub}><LogIn size={15} /> Sign in with GitHub</button>}<span className="engine-status"><span className="online-dot" /> ENGINE ONLINE</span></div>
         </header>
 
         <div className="page-content">
@@ -755,6 +779,8 @@ export default function App() {
             </section>
           )}
 
+          {active === "Tools" && <ToolsPanel result={result} />}
+          {active === "Admin" && <section className="page-section"><div className="page-heading"><div className="eyebrow"><ShieldCheck size={14} /> PRIVATE WORKSPACE</div><h1>Admin console</h1><p>Account and workspace administration.</p></div>{isAdmin ? <div className="admin-card"><ShieldCheck size={28} /><div><strong>Administrator access confirmed</strong><p>Signed in as {authUser?.user_metadata?.user_name || authUser?.email}. Role supplied by Supabase app metadata.</p><small>Never expose the Supabase service-role key in this frontend.</small></div></div> : <div className="notice error-notice">Administrator access required.</div>}</section>}
           <footer className="app-footer"><span>CodeDNA</span> · BUILT TO MAKE CODE MAKE SENSE</footer>
         </div>
       </section>
