@@ -9,7 +9,7 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 
 import { useEffect, useMemo, useState } from "react";
-import { Wrench, LogIn, LogOut, ShieldCheck } from "lucide-react";
+import { Wrench, LogIn, LogOut } from "lucide-react";
 import { ToolsPanel } from "./ToolsPanel";
 import { supabase } from "./supabase";
 import {
